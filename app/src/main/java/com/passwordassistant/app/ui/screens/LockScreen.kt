@@ -29,6 +29,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -96,6 +97,13 @@ fun LockScreen(vaultViewModel: VaultViewModel) {
                 },
                 onError = { message -> error = message },
             )
+        }
+    }
+
+    // 已开启指纹解锁时，进入锁屏页自动触发一次生物识别，无需手动点击
+    LaunchedEffect(biometricAvailable, biometricEnrolled) {
+        if (biometricAvailable && biometricEnrolled) {
+            unlockWithBiometric()
         }
     }
 
