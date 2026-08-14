@@ -1,84 +1,109 @@
 # 密码助手（PasswordAssistant）
 
-一款 Android 原生密码记录应用，核心特色是**自定义密码存储模板**：每个分组就是一套模板，你可以为每个分组定义完全不同的字段（例如 SSH 分组包含服务器名称、IP、端口、用户名、密码、备注；QQ 分组只有 QQ 号码、昵称、密码、备注）。
+一个我自己日常在用的 Android 密码记录 App。
 
-技术栈：Kotlin + Jetpack Compose + Material 3 + Room + DataStore + Argon2id（argon2kt）+ Android Keystore，原生 Android（minSdk 26 / targetSdk 35，兼容 Android 16）。
+密码越来越多，记不住；同一个密码到处用，又不放心。市面上的密码管理器很强大，但都让我按它们的规则来：网站、用户名、密码……可我记的很多根本不是"网站密码"——是服务器、是 QQ 号、是 Wi-Fi、是各种只有我知道要填什么的杂七杂八。
 
-## 已实现功能
+所以我写了这个 App：**每个分组都可以自定义字段**，你说了算。
 
-- 首页分组卡片（类似快捷指令的网格布局），显示图标、颜色、记录数；顶部左侧标题、右侧设置入口，无底部 Tab
-- 分组管理：新建 / 编辑 / 删除，支持自定义图标、颜色、字段模板
-- 字段模板：文本、数字、密码、多行文本四种类型；支持默认值、必填、排序、增删改
-- **列表展示配置**：新建分组时可指定每条记录卡片上的主标题、副标题显示哪个字段
-- 记录管理：按分组模板动态渲染表单，新增 / 编辑 / 删除记录
-- 主题：跟随系统 / 浅色 / 深色，Material 3 设计
-- 备份 / 恢复：全部数据导出为 zip（分组模板 + 记录 + 设置），支持一键恢复
-- 首次启动自动创建 SSH 密码、QQ 密码两个示例分组
-- 动效：页面转场、卡片按压缩放、列表项插入动画；release 构建启用 R8 混淆与资源压缩（APK 约 1.5 MB）
-- **安全加固**：
-  - 首次使用强制设置主密码，Argon2id（32 MiB / t=3）派生 256 位密钥，AES-256-GCM 加密每条记录的字段值与标题
-  - 解锁前内存中不保留密钥；后台 60 秒自动锁定，也可手动立即锁定
-  - 锁定时启用 FLAG_SECURE，任务卡片与截图均为空白
-  - 指纹解锁（Android Keystore 强认证密钥包装保险库密钥，可选启用）
-  - 修改主密码时全部记录自动用新密钥重新加密
-  - 复制密码后 30 秒自动清除剪贴板
-  - 旧版本明文数据在解锁后自动迁移加密
-- **云同步（Node.js 后端，开源可自建）**：
-  - 本地快照使用主密码派生的密钥加密后上传，服务器只能存取密文、无法解密
-  - 默认官方服务器 `https://backup.06xy.cn`，也可在设置中填写自建服务器地址与同步令牌
-  - 支持上传快照与下载恢复（下载前确认，替换本地数据）
-  - 后端源码在 `server/` 目录：Express + Token 鉴权（常量时间比较）+ IP 限流 + 请求体限制，生产环境建议置于 HTTPS 反向代理后
+## 它解决什么问题
 
-## 备份格式
+新建一个分组叫「SSH 密码」，它要填的就是：
 
-备份为 zip 文件，包含：
+> 服务器名称、IP、端口（默认 22）、用户名、密码、备注
 
+再建一个分组叫「QQ 密码」，它要填的只有：
+
+> QQ 号码、昵称、密码、备注
+
+首页是一张张卡片，像苹果快捷指令那样，点进去就是该分组自己的表单。字段类型支持文本、数字、密码、多行文本，还能设默认值、必填、排序。
+
+## 功能一览
+
+- 首页分组卡片：图标、颜色、记录数一目了然，点进去直接填表
+- 自定义模板：字段随便加、随便删、随便排序，每个分组互不干扰
+- 列表展示可配置：每条记录卡片上显示哪个字段当标题、哪个当副标题，建分组时自己选
+- 主题：跟随系统 / 浅色 / 深色，Material 3
+- 备份 / 恢复：所有数据一键导出为 zip，换手机再导回来
+- 首次启动会自动建好「SSH 密码」和「QQ 密码」两个示例，看完就知道怎么用了
+
+## 关于安全
+
+密码类应用，安全是底线。说几点我实际做的：
+
+- 首次使用必须设置**主密码**，它用来派生加密密钥（Argon2id），每条记录的字段值和标题都用 AES-256-GCM 加密后才落盘
+- **主密码忘了就真的找不回来**，App 里没有任何后门，备份也是加密的——请务必记牢
+- 解锁后密钥只在内存里；后台 60 秒自动锁定，也可以手动立即锁定
+- 锁定时任务卡片和截图都是黑的，防止别人瞥见
+- 支持指纹解锁（Android 系统安全芯片保管密钥），进入应用会自动弹指纹，不用点按钮
+- 复制密码 30 秒后自动清空剪贴板
+- 修改主密码时，全部记录会自动用新密钥重新加密
+
+## 云同步
+
+数据加密后上传，服务器只负责存密文，**服务端无法解密**——包括我自己搭的官方服务器。
+
+- 默认服务器：`https://backup.06xy.cn`
+- 也可以填自己的服务器地址 + 同步令牌
+- 上传快照 / 下载恢复，下载前会再次确认
+
+后端源码就在本仓库的 `server/` 目录，Node.js + Express，开源可自建。部署命令：
+
+```bash
+cd server
+npm install --omit=dev
+export DEFAULT_TOKEN="你的同步令牌"
+pm2 start ecosystem.config.cjs
+pm2 save && pm2 startup
 ```
-backup.zip
-├─ manifest.json    # 应用名、格式版本、导出时间
-├─ settings.json    # 系统设置（如主题模式）
-├─ groups.json      # 全部分组及字段模板定义
-└─ entries.json     # 全部记录数据
+
+几点部署提醒：
+
+- 生产环境把 `DISABLE_REGISTER=1` 开着（生态文件里已默认），令牌由管理员分配，别让别人随便注册
+- 令牌别写进代码仓库，用环境变量注入
+- 前面务必放 HTTPS 反向代理（Caddy / Nginx），客户端默认地址走 TLS
+
+## 安装与构建
+
+直接安装 release 包即可：
+
+```text
+app/build/outputs/apk/release/app-release.apk
 ```
 
-该格式未来可直接复用于云同步：整个备份（或其中的密文块）加密后上传到云端，服务器只负责存取，无法解密。
-
-## 构建与运行
-
-环境要求：JDK 17、Android SDK（platform 35）。
-
-命令行构建（debug APK）：
+自己构建（需要 JDK 17 + Android SDK 35）：
 
 ```powershell
-.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:assembleDebug      # 调试包
+.\gradlew.bat :app:assembleRelease    # 正式包（R8 混淆压缩，约 3 MB）
 ```
 
-APK 输出位置：`app/build/outputs/apk/debug/app-debug.apk`
-
-也可以直接用 Android Studio 打开本项目目录运行。`local.properties` 中的 `sdk.dir` 指向本机 SDK 路径，该文件已被 git 忽略。
+也可以用 Android Studio 打开项目直接跑。
 
 ## 项目结构
 
-```
-app/src/main/java/com/passwordassistant/app/
-├─ PasswordApp.kt              # Application + 依赖容器 + 首次种子数据
-├─ MainActivity.kt             # 入口 Activity
-├─ data/
-│  ├─ FieldType.kt             # 字段类型枚举（文本/数字/密码/多行）
-│  ├─ FieldDefinition.kt       # 字段定义（模板的一项）
-│  ├─ GroupEntity.kt           # 分组 = 模板
-│  ├─ EntryEntity.kt           # 记录 = 按模板填写的值
-│  ├─ GroupDao.kt / EntryDao.kt
-│  ├─ AppDatabase.kt           # Room 数据库
-│  ├─ SettingsRepository.kt    # DataStore 设置
-│  └─ BackupManager.kt         # zip 导出 / 导入
-└─ ui/
-   ├─ MainScreen.kt            # 底部导航 + 路由
-   ├─ theme/                   # Material 3 主题、分组图标与配色
-   └─ screens/                 # 首页 / 分组详情 / 分组编辑 / 记录编辑 / 设置
+```text
+app/     Android 客户端（Kotlin + Jetpack Compose + Room）
+server/  云同步后端（Node.js + Express，pm2 部署）
 ```
 
-## 后续路线
+客户端核心代码：
 
-1. **真机验证**：指纹解锁已改为“启用时先弹生物识别验证，通过后包装密钥”，并加入设备兼容降级；需要在真机上重新开启验证
-2. **多品牌兼容**：华为 / 小米 / 三星等设备的锁屏与生物识别行为差异实测
+```text
+data/
+├─ FieldDefinition.kt   字段定义（模板的一项）
+├─ GroupEntity.kt       分组 = 模板
+├─ EntryEntity.kt       记录 = 按模板填写的值
+├─ VaultManager.kt      主密码、加密、锁屏、指纹
+├─ SyncRepository.kt    云同步
+└─ BackupManager.kt     备份 zip 导出 / 导入
+ui/
+└─ screens/             首页 / 分组 / 记录 / 设置 / 锁屏
+```
+
+## 接下来想做的事
+
+- 真机指纹验证：代码在模拟器上验证不了，需要真机多跑跑
+- 多品牌兼容：华为、小米、三星的锁屏和生物识别行为差异，打算各借一台实测
+
+如果你也遇到类似"密码记不过来"的烦恼，欢迎提 issue 或者直接改代码。
