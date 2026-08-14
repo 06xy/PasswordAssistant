@@ -26,8 +26,9 @@ npm install -g pm2
 # 设置预置令牌（生产环境由管理员分配，不要写进代码仓库）
 export DEFAULT_TOKEN="你的同步令牌"
 
-# 启动（使用仓库内生态文件，已配置生产参数与自动重启）
-pm2 start ecosystem.config.js
+# 启动（使用仓库内生态文件，已配置生产参数与自动重启；
+# 注意必须是 .cjs 后缀，因为 package.json 声明了 "type": "module"）
+pm2 start ecosystem.config.cjs
 
 # 保存进程列表并配置开机自启（会输出一条 systemd 命令，复制执行即可）
 pm2 save
