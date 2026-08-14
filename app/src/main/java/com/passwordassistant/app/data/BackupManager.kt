@@ -21,6 +21,7 @@ class BackupManager(
     private val context: Context,
     private val database: AppDatabase,
     private val settingsRepository: SettingsRepository,
+    private val vaultManager: VaultManager,
 ) {
     private val json = Json {
         prettyPrint = true
@@ -114,6 +115,7 @@ class BackupManager(
                 .getOrDefault(ThemeMode.SYSTEM)
             settingsRepository.setThemeMode(mode)
         }
+        vaultManager.migrateLegacyEntries()
 
         BackupResult(backupGroups.groups.size, backupEntries.entries.size)
     }

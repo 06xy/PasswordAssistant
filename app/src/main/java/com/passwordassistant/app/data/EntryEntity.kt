@@ -29,8 +29,8 @@ data class EntryEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 ) {
-    fun values(): Map<String, String> =
+    fun values(decrypt: (String) -> String = { it }): Map<String, String> =
         runCatching {
-            AppJson.json.decodeFromString<Map<String, String>>(valuesJson)
+            AppJson.json.decodeFromString<Map<String, String>>(decrypt(valuesJson))
         }.getOrDefault(emptyMap())
 }

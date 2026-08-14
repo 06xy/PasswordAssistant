@@ -2,7 +2,7 @@
 
 一款 Android 原生密码记录应用，核心特色是**自定义密码存储模板**：每个分组就是一套模板，你可以为每个分组定义完全不同的字段（例如 SSH 分组包含服务器名称、IP、端口、用户名、密码、备注；QQ 分组只有 QQ 号码、昵称、密码、备注）。
 
-技术栈：Kotlin + Jetpack Compose + Material 3 + Room + DataStore，原生 Android（minSdk 26 / targetSdk 35，兼容 Android 16）。
+技术栈：Kotlin + Jetpack Compose + Material 3 + Room + DataStore + Argon2id（argon2kt）+ Android Keystore，原生 Android（minSdk 26 / targetSdk 35，兼容 Android 16）。
 
 ## 已实现功能
 
@@ -15,6 +15,14 @@
 - 备份 / 恢复：全部数据导出为 zip（分组模板 + 记录 + 设置），支持一键恢复
 - 首次启动自动创建 SSH 密码、QQ 密码两个示例分组
 - 动效：页面转场、卡片按压缩放、列表项插入动画；release 构建启用 R8 混淆与资源压缩（APK 约 1.5 MB）
+- **安全加固**：
+  - 首次使用强制设置主密码，Argon2id（32 MiB / t=3）派生 256 位密钥，AES-256-GCM 加密每条记录的字段值与标题
+  - 解锁前内存中不保留密钥；后台 60 秒自动锁定，也可手动立即锁定
+  - 锁定时启用 FLAG_SECURE，任务卡片与截图均为空白
+  - 指纹解锁（Android Keystore 强认证密钥包装保险库密钥，可选启用）
+  - 修改主密码时全部记录自动用新密钥重新加密
+  - 复制密码后 30 秒自动清除剪贴板
+  - 旧版本明文数据在解锁后自动迁移加密
 
 ## 备份格式
 
@@ -67,11 +75,10 @@ app/src/main/java/com/passwordassistant/app/
 
 ## 后续路线
 
-1. **安全加固**：主密码解锁（Argon2id 派生密钥 + AES-256-GCM）、Android Keystore 包装密钥、生物识别快速解锁、剪贴板自动清除、任务卡片模糊
-2. **备份加密**：备份 zip 支持备份密码加密
-3. **云同步（Node.js 后端）**：加密后的备份快照上传/下载。后端计划使用 Node.js + TypeScript，安全措施包括：
+1. **备份加密**：备份 zip 支持独立的备份密码加密（与主密码分离）
+2. **云同步（Node.js 后端）**：加密后的备份快照上传/下载。后端计划使用 Node.js + TypeScript，安全措施包括：
    - HTTPS 全链路加密，仅传输密文，服务端无法解密
    - JWT 登录鉴权 + 令牌轮换，接口限流与防暴力破解
    - 参数校验、SQL 注入防护（若用数据库）、CORS 白名单、安全响应头
    - 开源部署，支持官方服务器或自建服务器地址切换
-4. **体验完善**：Android 自动填充（Autofill）、搜索、分组排序、密码生成器
+3. **体验完善**：Android 自动填充（Autofill）、搜索、分组排序、密码生成器、生物识别真机适配验证

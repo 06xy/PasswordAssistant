@@ -21,6 +21,7 @@ class EntryEditViewModel(
     private val entryId: Long,
 ) : AndroidViewModel(application) {
     private val database = (application as PasswordApp).container.database
+    private val vaultManager = (application as PasswordApp).container.vaultManager
     private val json = AppJson.json
 
     private val _group = MutableStateFlow<GroupEntity?>(null)
@@ -44,20 +45,21 @@ class EntryEditViewModel(
         onDone: () -> Unit,
     ) {
         viewModelScope.launch {
-            val valuesJson = json.encodeToString(values)
+            val valuesJson = vaultManager.encryptEntryValues(json.encodeToString(values))
+            val encryptedTitle = vaultManager.encryptEntryValues(title)
             val existing = _entry.value
             if (existing == null) {
                 database.entryDao().insert(
                     EntryEntity(
                         groupId = groupId,
-                        title = title,
+                        title = encryptedTitle,
                         valuesJson = valuesJson,
                     ),
                 )
             } else {
                 database.entryDao().update(
                     existing.copy(
-                        title = title,
+                        title = encryptedTitle,
                         valuesJson = valuesJson,
                         updatedAt = System.currentTimeMillis(),
                     ),
@@ -66,6 +68,9 @@ class EntryEditViewModel(
             onDone()
         }
     }
+
+    fun decryptEntryValues(payload: String): String =
+        vaultManager.decryptEntryValues(payload)
 
     companion object {
         fun factory(groupId: Long, entryId: Long): ViewModelProvider.Factory = viewModelFactory {

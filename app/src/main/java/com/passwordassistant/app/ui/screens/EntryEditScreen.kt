@@ -58,7 +58,7 @@ fun EntryEditScreen(
     LaunchedEffect(group, entry) {
         val g = group ?: return@LaunchedEffect
         if (!initialized) {
-            val existing = entry?.values().orEmpty()
+            val existing = entry?.values(viewModel::decryptEntryValues).orEmpty()
             g.fields().forEach { field ->
                 values[field.key] = existing[field.key] ?: field.defaultValue
             }

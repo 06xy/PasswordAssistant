@@ -6,6 +6,7 @@ import com.passwordassistant.app.data.AppDatabase
 import com.passwordassistant.app.data.BackupManager
 import com.passwordassistant.app.data.SeedData
 import com.passwordassistant.app.data.SettingsRepository
+import com.passwordassistant.app.data.VaultManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,7 +15,8 @@ import kotlinx.coroutines.launch
 class AppContainer(context: Context) {
     val database: AppDatabase = AppDatabase.build(context)
     val settingsRepository = SettingsRepository(context)
-    val backupManager = BackupManager(context, database, settingsRepository)
+    val vaultManager = VaultManager(context, database)
+    val backupManager = BackupManager(context, database, settingsRepository, vaultManager)
 }
 
 class PasswordApp : Application() {

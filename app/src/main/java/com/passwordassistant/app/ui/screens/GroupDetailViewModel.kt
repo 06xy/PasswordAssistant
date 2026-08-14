@@ -17,6 +17,7 @@ class GroupDetailViewModel(
     private val groupId: Long,
 ) : AndroidViewModel(application) {
     private val database = (application as PasswordApp).container.database
+    private val vaultManager = (application as PasswordApp).container.vaultManager
 
     val group: Flow<GroupEntity?> = database.groupDao().observeById(groupId)
     val entries: Flow<List<EntryEntity>> = database.entryDao().observeByGroup(groupId)
@@ -34,6 +35,9 @@ class GroupDetailViewModel(
             database.entryDao().delete(entry)
         }
     }
+
+    fun decryptEntryValues(payload: String): String =
+        vaultManager.decryptEntryValues(payload)
 
     companion object {
         fun factory(groupId: Long): ViewModelProvider.Factory = viewModelFactory {
