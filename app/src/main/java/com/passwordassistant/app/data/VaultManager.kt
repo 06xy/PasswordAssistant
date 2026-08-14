@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -64,6 +65,9 @@ class VaultManager(
 
     @Volatile
     private var pendingBiometricPayload: ByteArray? = null
+
+    @Volatile
+    private var pendingEnrollPayload: ByteArray? = null
 
     init {
         scope.launch {
@@ -143,7 +147,7 @@ class VaultManager(
             prefs[verifierKey] = newVerifier
         }
         if (keystoreKeyExists()) {
-            wrapKeyWithBiometric(newKey)
+            disableBiometric()
         }
         vaultKey = newKey
         return true
@@ -154,11 +158,32 @@ class VaultManager(
             .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
             BiometricManager.BIOMETRIC_SUCCESS
 
-    suspend fun enrollBiometric(): Boolean = runCatching {
-        val key = vaultKey ?: error("未解锁")
-        wrapKeyWithBiometric(key)
-        true
-    }.getOrDefault(false)
+    suspend fun createBiometricEnrollCipher(): Cipher? = withContext(Dispatchers.IO) {
+        runCatching {
+            val key = vaultKey ?: error("未解锁")
+            val keystoreKey = createOrReplaceBiometricKey()
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, keystoreKey)
+            pendingEnrollPayload = key
+            cipher
+        }.getOrNull()
+    }
+
+    suspend fun finishBiometricEnroll(cipher: Cipher?): Boolean {
+        if (cipher == null) return false
+        return runCatching {
+            val payload = pendingEnrollPayload ?: return false
+            val ciphertext = cipher.doFinal(payload)
+            pendingEnrollPayload = null
+            val wrapped = Base64.encodeToString(cipher.iv + ciphertext, Base64.NO_WRAP)
+            context.vaultDataStore.edit { prefs ->
+                prefs[wrappedKeyKey] = wrapped
+                prefs[biometricEnabledKey] = "1"
+            }
+            _biometricEnrolled.value = true
+            true
+        }.getOrDefault(false)
+    }
 
     suspend fun disableBiometric() {
         runCatching {
@@ -216,6 +241,8 @@ class VaultManager(
         return runCatching { VaultCrypto.decrypt(key, payload) }.getOrDefault(payload)
     }
 
+    fun currentKey(): ByteArray? = vaultKey
+
     suspend fun migrateLegacyEntries() {
         val key = vaultKey ?: return
         val plaintextEntries = database.entryDao().getAll()
@@ -240,14 +267,14 @@ class VaultManager(
         }
     }
 
-    private fun wrapKeyWithBiometric(key: ByteArray) {
+    private fun createOrReplaceBiometricKey(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         ks.deleteEntry(BIOMETRIC_ALIAS)
         val generator = KeyGenerator.getInstance(
             KeyProperties.KEY_ALGORITHM_AES,
             "AndroidKeyStore",
         )
-        val builder = KeyGenParameterSpec.Builder(
+        val primary = KeyGenParameterSpec.Builder(
             BIOMETRIC_ALIAS,
             KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
         )
@@ -255,21 +282,31 @@ class VaultManager(
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setUserAuthenticationRequired(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            builder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+            primary.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
         }
-        generator.init(builder.build())
-        val keystoreKey = generator.generateKey()
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, keystoreKey)
-        val ciphertext = cipher.doFinal(key)
-        val wrapped = Base64.encodeToString(cipher.iv + ciphertext, Base64.NO_WRAP)
-
-        scope.launch {
-            context.vaultDataStore.edit { prefs ->
-                prefs[wrappedKeyKey] = wrapped
-                prefs[biometricEnabledKey] = "1"
+        try {
+            generator.init(primary.build())
+            return generator.generateKey()
+        } catch (e: Exception) {
+            // 部分设备不支持纯生物识别强认证密钥，降级为“生物识别或设备凭据”
+            ks.deleteEntry(BIOMETRIC_ALIAS)
+            val fallback = KeyGenParameterSpec.Builder(
+                BIOMETRIC_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setUserAuthenticationRequired(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                fallback.setUserAuthenticationParameters(
+                    0,
+                    KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL,
+                )
+            } else {
+                fallback.setUserAuthenticationValidityDurationSeconds(-1)
             }
-            _biometricEnrolled.value = true
+            generator.init(fallback.build())
+            return generator.generateKey()
         }
     }
 

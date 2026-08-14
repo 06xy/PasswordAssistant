@@ -31,11 +31,11 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     fun biometricAvailable(): Boolean = vault.biometricAvailable()
 
-    fun enrollBiometric(onResult: (Boolean) -> Unit) {
-        viewModelScope.launch {
-            onResult(vault.enrollBiometric())
-        }
-    }
+    suspend fun createBiometricEnrollCipher(): Cipher? =
+        vault.createBiometricEnrollCipher()
+
+    suspend fun finishBiometricEnroll(cipher: Cipher?): Boolean =
+        vault.finishBiometricEnroll(cipher)
 
     fun disableBiometric() {
         viewModelScope.launch {

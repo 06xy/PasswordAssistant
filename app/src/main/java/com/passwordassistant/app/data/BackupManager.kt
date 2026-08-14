@@ -8,6 +8,8 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.BufferedOutputStream
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -29,7 +31,7 @@ class BackupManager(
         encodeDefaults = true
     }
 
-    suspend fun exportTo(uri: Uri): Result<BackupResult> = runCatching {
+    suspend fun buildBackupBytes(): ByteArray {
         val groups = database.groupDao().getAll()
         val entries = database.entryDao().getAll()
         val settings = settingsRepository.themeMode.first()
@@ -47,16 +49,25 @@ class BackupManager(
             "entries.json" to json.encodeToString(BackupEntries.serializer(), BackupEntries(entries)),
         )
 
+        val buffer = ByteArrayOutputStream()
+        ZipOutputStream(BufferedOutputStream(buffer)).use { zip ->
+            files.forEach { (name, content) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(content.encodeToByteArray())
+                zip.closeEntry()
+            }
+        }
+        return buffer.toByteArray()
+    }
+
+    suspend fun exportTo(uri: Uri): Result<BackupResult> = runCatching {
+        val groups = database.groupDao().getAll()
+        val entries = database.entryDao().getAll()
+        val bytes = buildBackupBytes()
         val output = context.contentResolver.openOutputStream(uri)
             ?: error("无法写入所选位置")
         output.use { raw ->
-            ZipOutputStream(BufferedOutputStream(raw)).use { zip ->
-                files.forEach { (name, content) ->
-                    zip.putNextEntry(ZipEntry(name))
-                    zip.write(content.encodeToByteArray())
-                    zip.closeEntry()
-                }
-            }
+            raw.write(bytes)
         }
         BackupResult(groups.size, entries.size)
     }
@@ -64,8 +75,13 @@ class BackupManager(
     suspend fun importFrom(uri: Uri): Result<BackupResult> = runCatching {
         val stream = context.contentResolver.openInputStream(uri)
             ?: error("无法读取所选文件")
+        val bytes = stream.use { it.readBytes() }
+        importBytes(bytes)
+    }
+
+    suspend fun importBytes(bytes: ByteArray): BackupResult {
         val files = mutableMapOf<String, String>()
-        stream.use { raw ->
+        ByteArrayInputStream(bytes).use { raw ->
             ZipInputStream(raw.buffered()).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
@@ -117,6 +133,6 @@ class BackupManager(
         }
         vaultManager.migrateLegacyEntries()
 
-        BackupResult(backupGroups.groups.size, backupEntries.entries.size)
+        return BackupResult(backupGroups.groups.size, backupEntries.entries.size)
     }
 }

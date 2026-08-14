@@ -4,6 +4,8 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,20 +41,29 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.passwordassistant.app.data.SyncRepository
 import com.passwordassistant.app.data.ThemeMode
+import com.passwordassistant.app.ui.launchBiometricAuth
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +78,16 @@ fun SettingsScreen(
     var showRestoreConfirm by remember { mutableStateOf(false) }
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
     var showChangePassword by remember { mutableStateOf(false) }
+    var showSyncRestoreConfirm by remember { mutableStateOf(false) }
     val biometricAvailable = remember { vaultViewModel.biometricAvailable() }
+    val scope = rememberCoroutineScope()
+    val syncServerUrl by viewModel.syncServerUrl.collectAsState()
+    val syncTokenStored by viewModel.syncToken.collectAsState()
+    val lastSyncAt by viewModel.lastSyncAt.collectAsState()
+    var syncServerInput by remember { mutableStateOf("") }
+    var syncTokenInput by remember { mutableStateOf("") }
+    LaunchedEffect(syncServerUrl) { syncServerInput = syncServerUrl }
+    LaunchedEffect(syncTokenStored) { syncTokenInput = syncTokenStored }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip"),
@@ -147,12 +167,46 @@ fun SettingsScreen(
                                         checked = biometricEnrolled,
                                         onCheckedChange = { enable ->
                                             if (enable) {
-                                                vaultViewModel.enrollBiometric { ok ->
-                                                    Toast.makeText(
-                                                        context,
-                                                        if (ok) "指纹解锁已启用" else "启用失败，请确认已录入指纹",
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
+                                                scope.launch {
+                                                    val cipher = vaultViewModel.createBiometricEnrollCipher()
+                                                    if (cipher == null) {
+                                                        Toast.makeText(
+                                                            context,
+                                                            "启用失败：请确认已录入指纹且未锁定应用",
+                                                            Toast.LENGTH_LONG,
+                                                        ).show()
+                                                        return@launch
+                                                    }
+                                                    launchBiometricAuth(
+                                                        context = context,
+                                                        title = "启用指纹解锁",
+                                                        subtitle = "验证指纹后，保险库密钥将交给系统安全芯片保管",
+                                                        negativeButtonText = "取消",
+                                                        cryptoObject = BiometricPrompt.CryptoObject(cipher),
+                                                        onSuccess = { result ->
+                                                            scope.launch {
+                                                                val ok = vaultViewModel.finishBiometricEnroll(
+                                                                    result.cryptoObject?.cipher,
+                                                                )
+                                                                Toast.makeText(
+                                                                    context,
+                                                                    if (ok) {
+                                                                        "指纹解锁已启用"
+                                                                    } else {
+                                                                        "启用失败，请重试"
+                                                                    },
+                                                                    Toast.LENGTH_SHORT,
+                                                                ).show()
+                                                            }
+                                                        },
+                                                        onError = { message ->
+                                                            Toast.makeText(
+                                                                context,
+                                                                "启用失败：$message",
+                                                                Toast.LENGTH_SHORT,
+                                                            ).show()
+                                                        },
+                                                    )
                                                 }
                                             } else {
                                                 vaultViewModel.disableBiometric()
@@ -180,6 +234,84 @@ fun SettingsScreen(
                                 vaultViewModel.lock()
                             },
                         )
+                    }
+                }
+            }
+
+            item {
+                SectionTitle("云同步")
+            }
+            item {
+                Card(
+                    shape = MaterialTheme.shapes.medium,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "本地快照使用主密码派生的密钥加密后上传，服务器只能存取密文，无法解密。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedTextField(
+                            value = syncServerInput,
+                            onValueChange = { syncServerInput = it },
+                            label = { Text("服务器地址") },
+                            placeholder = { Text(SyncRepository.DEFAULT_SERVER_URL) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = syncTokenInput,
+                            onValueChange = { syncTokenInput = it },
+                            label = { Text("同步令牌") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.saveSyncConfig(syncServerInput, syncTokenInput) { message ->
+                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                            ) {
+                                Text("保存设置")
+                            }
+                            TextButton(
+                                onClick = {
+                                    viewModel.syncUpload { message ->
+                                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                            ) {
+                                Text("上传快照")
+                            }
+                            TextButton(
+                                onClick = { showSyncRestoreConfirm = true },
+                            ) {
+                                Text("下载恢复")
+                            }
+                        }
+                        if (lastSyncAt > 0) {
+                            Text(
+                                text = "上次同步：" + SimpleDateFormat(
+                                    "yyyy-MM-dd HH:mm",
+                                    Locale.getDefault(),
+                                ).format(Date(lastSyncAt)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -274,7 +406,7 @@ fun SettingsScreen(
                 ) {
                     ListItem(
                         headlineContent = { Text("密码助手") },
-                        supportingContent = { Text("版本 0.3.0 · 数据仅保存在本机") },
+                        supportingContent = { Text("版本 0.4.0 · 支持云同步") },
                         leadingContent = {
                             Icon(Icons.Outlined.Lock, contentDescription = null)
                         },
@@ -333,6 +465,31 @@ fun SettingsScreen(
                     if (ok) {
                         showChangePassword = false
                     }
+                }
+            },
+        )
+    }
+
+    if (showSyncRestoreConfirm) {
+        AlertDialog(
+            onDismissRequest = { showSyncRestoreConfirm = false },
+            title = { Text("下载并恢复") },
+            text = { Text("将用云端快照替换当前全部分组和记录，此操作不可撤销。确定继续吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSyncRestoreConfirm = false
+                        viewModel.syncDownload { message ->
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        }
+                    },
+                ) {
+                    Text("下载恢复")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSyncRestoreConfirm = false }) {
+                    Text("取消")
                 }
             },
         )

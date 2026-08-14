@@ -42,10 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import com.passwordassistant.app.data.LockState
-import com.passwordassistant.app.ui.findActivity
+import com.passwordassistant.app.ui.launchBiometricAuth
 import kotlinx.coroutines.launch
 
 @Composable
@@ -82,42 +80,21 @@ fun LockScreen(vaultViewModel: VaultViewModel) {
                 Toast.makeText(context, "生物识别不可用，请使用主密码", Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            val activity = context.findActivity() as? FragmentActivity
-                ?: return@launch
-            val prompt = BiometricPrompt(
-                activity,
-                ContextCompat.getMainExecutor(context),
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(
-                        result: BiometricPrompt.AuthenticationResult,
-                    ) {
-                        val crypto = result.cryptoObject
-                        scope.launch {
-                            if (!vaultViewModel.finishBiometricUnlock(crypto?.cipher)) {
-                                error = "解锁失败，请使用主密码"
-                            }
-                        }
-                    }
-
-                    override fun onAuthenticationError(
-                        errorCode: Int,
-                        errString: CharSequence,
-                    ) {
-                        if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
-                            errorCode != BiometricPrompt.ERROR_USER_CANCELED
-                        ) {
-                            error = errString.toString()
+            launchBiometricAuth(
+                context = context,
+                title = "指纹解锁",
+                subtitle = "使用指纹快速解锁密码助手",
+                negativeButtonText = "使用主密码",
+                cryptoObject = BiometricPrompt.CryptoObject(cipher),
+                onSuccess = { result ->
+                    val crypto = result.cryptoObject
+                    scope.launch {
+                        if (!vaultViewModel.finishBiometricUnlock(crypto?.cipher)) {
+                            error = "解锁失败，请使用主密码"
                         }
                     }
                 },
-            )
-            prompt.authenticate(
-                BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("指纹解锁")
-                    .setSubtitle("使用指纹快速解锁密码助手")
-                    .setNegativeButtonText("使用主密码")
-                    .build(),
-                BiometricPrompt.CryptoObject(cipher),
+                onError = { message -> error = message },
             )
         }
     }

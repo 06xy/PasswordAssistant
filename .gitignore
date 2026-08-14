@@ -11,3 +11,5 @@
 .cxx
 /screenshots
 /build-log.txt
+/server/node_modules
+/server/data
