@@ -2,6 +2,7 @@ package com.passwordassistant.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -210,7 +211,8 @@ fun GroupEditScreen(
                                     } else {
                                         Modifier
                                     },
-                                ),
+                                )
+                                .clickable { icon = key },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
@@ -253,7 +255,8 @@ fun GroupEditScreen(
                                     } else {
                                         Modifier
                                     },
-                                ),
+                                )
+                                .clickable { colorIndex = index },
                             contentAlignment = Alignment.Center,
                         ) {
                             if (selected) {
