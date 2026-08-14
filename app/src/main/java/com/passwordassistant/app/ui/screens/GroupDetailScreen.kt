@@ -1,10 +1,5 @@
 package com.passwordassistant.app.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.os.Build
-import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,7 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Lock
@@ -50,7 +44,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,19 +52,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.passwordassistant.app.data.EntryEntity
-import com.passwordassistant.app.data.FieldType
 import com.passwordassistant.app.data.GroupEntity
 import com.passwordassistant.app.ui.Route
 import com.passwordassistant.app.ui.theme.GroupVisuals
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,7 +144,8 @@ fun GroupDetailScreen(
                         group = group,
                         modifier = Modifier.animateItem(),
                         decrypt = viewModel::decryptEntryValues,
-                        onEdit = { navController.navigate(Route.entryEdit(groupId, entry.id)) },
+                        onOpen = { navController.navigate(Route.entryView(groupId, entry.id)) },
+                        onEditEntry = { navController.navigate(Route.entryEdit(groupId, entry.id)) },
                         onDelete = { pendingDeleteEntry = entry },
                     )
                 }
@@ -219,11 +209,10 @@ private fun EntryListItem(
     group: GroupEntity?,
     modifier: Modifier = Modifier,
     decrypt: (String) -> String,
-    onEdit: () -> Unit,
+    onOpen: () -> Unit,
+    onEditEntry: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val color = group?.let { GroupVisuals.colorOf(it.colorIndex) } ?: MaterialTheme.colorScheme.primary
     val displayTitle = decrypt(entry.title)
     val subtitle = remember(group, entry) {
@@ -247,27 +236,8 @@ private fun EntryListItem(
         label = "entryCardScale",
     )
 
-    fun copyPassword() {
-        val g = group ?: return
-        val fields = g.fields()
-        val passwordField = fields.firstOrNull { it.type == FieldType.PASSWORD } ?: return
-        val values = entry.values(decrypt)
-        val value = values[passwordField.key] ?: return
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText(displayTitle, value))
-        Toast.makeText(context, "已复制，30 秒后自动清除", Toast.LENGTH_SHORT).show()
-        scope.launch {
-            delay(30_000)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                clipboard.clearPrimaryClip()
-            } else {
-                clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
-            }
-        }
-    }
-
     Card(
-        onClick = onEdit,
+        onClick = onOpen,
         interactionSource = interactionSource,
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
@@ -317,13 +287,6 @@ private fun EntryListItem(
                 }
             }
             Box {
-                IconButton(onClick = ::copyPassword) {
-                    Icon(
-                        imageVector = Icons.Outlined.ContentCopy,
-                        contentDescription = "复制密码",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Outlined.MoreVert, contentDescription = "更多操作")
                 }
@@ -335,7 +298,7 @@ private fun EntryListItem(
                         text = { Text("编辑") },
                         onClick = {
                             menuExpanded = false
-                            onEdit()
+                            onEditEntry()
                         },
                     )
                     DropdownMenuItem(

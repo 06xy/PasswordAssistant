@@ -57,6 +57,8 @@ fun EntryEditScreen(
 
     LaunchedEffect(group, entry) {
         val g = group ?: return@LaunchedEffect
+        val isEdit = entryId > 0
+        if (isEdit && entry == null) return@LaunchedEffect
         if (!initialized) {
             val existing = entry?.values(viewModel::decryptEntryValues).orEmpty()
             g.fields().forEach { field ->

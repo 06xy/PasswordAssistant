@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.passwordassistant.app.ui.screens.EntryEditScreen
+import com.passwordassistant.app.ui.screens.EntryViewScreen
 import com.passwordassistant.app.ui.screens.GroupDetailScreen
 import com.passwordassistant.app.ui.screens.GroupEditScreen
 import com.passwordassistant.app.ui.screens.HomeScreen
@@ -53,64 +55,81 @@ fun PasswordAssistantApp(
 
     PasswordAssistantTheme(themeMode = themeMode) {
         Box(modifier = Modifier.fillMaxSize()) {
-            NavHost(
-                navController = navController,
-                startDestination = Route.Home,
-                modifier = Modifier.fillMaxSize(),
-                enterTransition = {
-                    fadeIn(animationSpec = tween(260)) +
-                        slideInHorizontally(animationSpec = tween(260)) { it / 8 }
-                },
-                exitTransition = {
-                    fadeOut(animationSpec = tween(180))
-                },
-                popEnterTransition = {
-                    fadeIn(animationSpec = tween(260))
-                },
-                popExitTransition = {
-                    fadeOut(animationSpec = tween(180)) +
-                        slideOutHorizontally(animationSpec = tween(180)) { it / 8 }
-                },
-            ) {
-                composable(Route.Home) {
-                    HomeScreen(navController = navController)
-                }
-                composable(Route.Settings) {
-                    SettingsScreen(
+            if (lockState == LockState.Unlocked) {
+                key(lockState) {
+                    NavHost(
                         navController = navController,
-                        vaultViewModel = vaultViewModel,
-                    )
-                }
-                composable(
-                    route = Route.GroupDetail,
-                    arguments = listOf(navArgument(Route.ArgGroupId) { type = NavType.LongType }),
-                ) { entry ->
-                    GroupDetailScreen(
-                        navController = navController,
-                        groupId = entry.arguments?.getLong(Route.ArgGroupId) ?: 0L,
-                    )
-                }
-                composable(
-                    route = Route.GroupEdit,
-                    arguments = listOf(navArgument(Route.ArgGroupId) { type = NavType.LongType }),
-                ) { entry ->
-                    GroupEditScreen(
-                        navController = navController,
-                        groupId = entry.arguments?.getLong(Route.ArgGroupId) ?: -1L,
-                    )
-                }
-                composable(
-                    route = Route.EntryEdit,
-                    arguments = listOf(
-                        navArgument(Route.ArgGroupId) { type = NavType.LongType },
-                        navArgument(Route.ArgEntryId) { type = NavType.LongType },
-                    ),
-                ) { entry ->
-                    EntryEditScreen(
-                        navController = navController,
-                        groupId = entry.arguments?.getLong(Route.ArgGroupId) ?: 0L,
-                        entryId = entry.arguments?.getLong(Route.ArgEntryId) ?: -1L,
-                    )
+                        startDestination = Route.Home,
+                        modifier = Modifier.fillMaxSize(),
+                        enterTransition = {
+                            fadeIn(animationSpec = tween(260)) +
+                                slideInHorizontally(animationSpec = tween(260)) { it / 8 }
+                        },
+                        exitTransition = {
+                            fadeOut(animationSpec = tween(180))
+                        },
+                        popEnterTransition = {
+                            fadeIn(animationSpec = tween(260))
+                        },
+                        popExitTransition = {
+                            fadeOut(animationSpec = tween(180)) +
+                                slideOutHorizontally(animationSpec = tween(180)) { it / 8 }
+                        },
+                    ) {
+                        composable(Route.Home) {
+                            HomeScreen(navController = navController)
+                        }
+                        composable(Route.Settings) {
+                            SettingsScreen(
+                                navController = navController,
+                                vaultViewModel = vaultViewModel,
+                            )
+                        }
+                        composable(
+                            route = Route.GroupDetail,
+                            arguments = listOf(navArgument(Route.ArgGroupId) { type = NavType.LongType }),
+                        ) { entry ->
+                            GroupDetailScreen(
+                                navController = navController,
+                                groupId = entry.arguments?.getLong(Route.ArgGroupId) ?: 0L,
+                            )
+                        }
+                        composable(
+                            route = Route.GroupEdit,
+                            arguments = listOf(navArgument(Route.ArgGroupId) { type = NavType.LongType }),
+                        ) { entry ->
+                            GroupEditScreen(
+                                navController = navController,
+                                groupId = entry.arguments?.getLong(Route.ArgGroupId) ?: -1L,
+                            )
+                        }
+                        composable(
+                            route = Route.EntryEdit,
+                            arguments = listOf(
+                                navArgument(Route.ArgGroupId) { type = NavType.LongType },
+                                navArgument(Route.ArgEntryId) { type = NavType.LongType },
+                            ),
+                        ) { entry ->
+                            EntryEditScreen(
+                                navController = navController,
+                                groupId = entry.arguments?.getLong(Route.ArgGroupId) ?: 0L,
+                                entryId = entry.arguments?.getLong(Route.ArgEntryId) ?: -1L,
+                            )
+                        }
+                        composable(
+                            route = Route.EntryView,
+                            arguments = listOf(
+                                navArgument(Route.ArgGroupId) { type = NavType.LongType },
+                                navArgument(Route.ArgEntryId) { type = NavType.LongType },
+                            ),
+                        ) { entry ->
+                            EntryViewScreen(
+                                navController = navController,
+                                groupId = entry.arguments?.getLong(Route.ArgGroupId) ?: 0L,
+                                entryId = entry.arguments?.getLong(Route.ArgEntryId) ?: 0L,
+                            )
+                        }
+                    }
                 }
             }
 

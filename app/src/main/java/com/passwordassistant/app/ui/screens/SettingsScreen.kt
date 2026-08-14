@@ -406,7 +406,7 @@ fun SettingsScreen(
                 ) {
                     ListItem(
                         headlineContent = { Text("密码助手") },
-                        supportingContent = { Text("版本 0.4.1 · 支持云同步") },
+                        supportingContent = { Text("版本 0.4.2 · 支持云同步") },
                         leadingContent = {
                             Icon(Icons.Outlined.Lock, contentDescription = null)
                         },
