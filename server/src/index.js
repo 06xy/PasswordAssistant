@@ -83,6 +83,9 @@ app.get('/health', (req, res) => {
 
 // 注册：生成一个新的同步令牌（一次性展示）
 app.post('/api/register', (req, res) => {
+  if (process.env.DISABLE_REGISTER === '1') {
+    return res.status(403).json({ error: '注册已关闭，请使用服务器管理员分配的令牌' });
+  }
   const token = crypto.randomBytes(24).toString('hex');
   const tokens = loadTokens();
   tokens.push(token);
